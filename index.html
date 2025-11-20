@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Healthcare App - Patients List</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                display: flex;
+                height: 100vh;
+            }
+
+            #box {
+                width: 95%;
+                overflow-x: auto;
+                padding: 20px;
+                background: #beb8b8;
+            }
+
+            #patientsList {
+                width: 15%;
+                overflow-y: auto;
+                padding: 20px;
+                background: #beb8b8;
+            }
+
+            #patientDetails {
+                flex: 1;
+                overflow-y: auto;
+                padding: 50px;
+                background: #c9c9c9;
+            }
+
+            .patient-item {
+                padding: 10px;
+                border-bottom: 1px solid #ddd;
+                cursor: pointer;
+            }
+
+            .patient-item:hover {
+                background: #79a36f;
+            }
+
+            .patient-item.active {
+                background: #dce7ff;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="patientsList"></div>
+        <div id="patientDetails">
+            <p>Please select a patient on the left panel to proceed.</p>
+        </div>
+        <script>
+            // The url for the proxy server, required to avoid CORS issues
+            const PROXY_URL = "http://localhost:8080/";
+
+            // The url for the REST API server
+            const REST_API_URL = PROXY_URL + "http://localhost:3000/";
+
+            // DOM elements
+            const patientsList = document.getElementById("patientsList");
+            const patientDetails = document.getElementById("patientDetails");
+
+            // Fetch the patients list from the REST API and prints it on
+            // the left panel
+            //
+            // NOTE: we fetch all the patients at once since we assume
+            // it was the intended mocked behavior. In a real world scenario,
+            // we would implement pagination here.
+            async function getPatientsList() {
+                let response;
+                try {
+                    // Fetch all patients
+                    response = await fetch(REST_API_URL + "patients");
+                } catch (error) {
+                    console.error("An error occurred: ", error.message);
+                }
+
+                const patients = await response.json();
+
+                // Append patients list to html
+                patientsList.innerHTML = "";
+                patients.forEach((patient) => {
+                    const item = document.createElement("div");
+                    item.className = "patient-item";
+                    item.textContent = patient.id + ". " + patient.name;
+                    item.onclick = () => selectPatient(patient, item);
+                    patientsList.appendChild(item);
+                });
+            }
+
+            // Fetch and display the selected patient's details
+            async function selectPatient(patient, element) {
+                document
+                    .querySelectorAll(".patient-item")
+                    .forEach((el) => el.classList.remove("active"));
+                element.classList.add("active");
+
+                let response;
+                try {
+                    // Fetch appointments for the selected patient
+                    response = await fetch(
+                        REST_API_URL + "appointments?patientId=" + patient.id,
+                    );
+                } catch (error) {
+                    console.error("An error occurred: ", error.message);
+                }
+
+                const appointments = await response.json();
+
+                let i = 0;
+                // Fetch patient appointments details
+                let appointmentsListPromise = appointments.map(
+                    async (appointment) => {
+                        let response;
+                        try {
+                            // Fetch doctor details for current appointment
+                            response = await fetch(
+                                REST_API_URL +
+                                    "doctors/" +
+                                    appointment.doctorId,
+                            );
+                        } catch (error) {
+                            console.error("An error occurred: ", error.message);
+                        }
+
+                        const doctor = await response.json();
+                        i++;
+
+                        return `
+                    <div id="box">
+                    <p><strong>Doctor:</strong> ${doctor.name}</p>
+                    <p><strong>Date:</strong> ${appointment.dateTime}</p> 
+                    <p><strong>Reason:</strong> ${appointment.reason}</p>
+                    </div>
+                    `;
+                    },
+                );
+
+                let appointmentsList = (
+                    await Promise.all(appointmentsListPromise)
+                ).join("<br>");
+                if (appointmentsList.length === 0) {
+                    appointmentsList = "<p>No appointments found.</p>";
+                }
+                // Write patient details to html
+                patientDetails.innerHTML = `
+                <h2>${patient.name}</h2>
+                <p><strong>ID:</strong> ${patient.id}</p>
+                <p><strong>Age:</strong> ${patient.age}</p>
+                <p><strong>Gender:</strong> ${patient.gender}</p>
+                <p><strong>Medical History:</strong> <div id="box">${patient.medicalHistory}</div></p>
+                <p><strong>Appointments:</strong> ${appointmentsList}</p>
+                `;
+            }
+
+            // Print the patients list on load
+            getPatientsList();
+        </script>
+    </body>
+</html>
